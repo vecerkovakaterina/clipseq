@@ -184,8 +184,8 @@ if (params.save_index)                           summary['Save STAR index?'] = p
 if (params.smrna_org)                            summary['SmallRNA organism ref'] = params.smrna_org
 if (params.smrna_fasta)                          summary['SmallRNA ref'] = params.smrna_fasta
 if (params.move_umi)                             summary['UMI pattern'] = params.move_umi
-if (params.deduplicate)                          summary['Deduplicate'] = params.deduplicate
-if (params.deduplicate && params.umi_separator)  summary['UMI separator'] = params.umi_separator
+if (!params.skip_deduplication)                  summary['Deduplicate'] = params.deduplicate
+if (!params.skip_deduplication && params.umi_separator) summary['UMI separator'] = params.umi_separator
 if (params.peakcaller)                           summary['Peak caller'] = params.peakcaller
 if (params.segment)                              summary['iCount segment'] = params.segment
 if (icount_check)                                summary['Half window'] = params.half_window
@@ -578,8 +578,8 @@ process cutadapt {
 
     script:
     """
-    ln -s $reads ${name}.fastq.gz
-    cutadapt -j $task.cpus -a ${params.adapter} -m 12 -o ${name}.trimmed.fastq.gz ${name}.fastq.gz > ${name}_cutadapt.log
+    [ -f ! ${name}.fastq.gz ] && ln -s $reads ${name}.fastq.gz
+    cutadapt -j ${task.cpus} -a ${params.adapter} -m 12 -o ${name}.trimmed.fastq.gz ${name}.fastq.gz > ${name}_cutadapt.log
     """
 }
 
@@ -686,7 +686,7 @@ process preseq {
 /*
  * STEP 6 - Deduplicate
  */
-if (params.deduplicate) {
+if (!params.skip_deduplication) {
     process dedup {
         tag "$name"
         label 'process_high'
@@ -722,7 +722,7 @@ if (params.deduplicate) {
  * STEP 6a - RSeQC
  */
 if (params.gtf) {
-    
+
     ch_gtf_rseqc = Channel
         .fromPath(params.gtf, checkIfExists: true)
         .ifEmpty { exit 1, "Genome reference gtf not found: ${params.gtf}" }
@@ -1055,7 +1055,7 @@ if ('piranha' in callers) {
  */
 process clipqc {
     label 'process_low'
-    publishDir "${params.outdir}/clipqc", mode: params.publish_dir_mode 
+    publishDir "${params.outdir}/clipqc", mode: params.publish_dir_mode
 
     input:
     file ('premap/*') from ch_premap_qc.collect().ifEmpty([])
@@ -1069,7 +1069,7 @@ process clipqc {
 
     output:
     path "*.tsv" into ch_clipqc_mqc
-    
+
     script:
     clip_qc_args = ''
 
@@ -1290,11 +1290,11 @@ def checkHostname() {
         params.hostnames.each { prof, hnames ->
             hnames.each { hname ->
                 if (hostname.contains(hname) && !workflow.profile.contains(prof)) {
-                    log.error '====================================================\n' +
+                    log.error "${c_red}====================================================${c_reset}\n" +
                             "  ${c_red}WARNING!${c_reset} You are running with `-profile $workflow.profile`\n" +
                             "  but your machine hostname is ${c_white}'$hostname'${c_reset}\n" +
                             "  ${c_yellow_bold}It's highly recommended that you use `-profile $prof${c_reset}`\n" +
-                            '============================================================'
+                            "${c_red}====================================================${c_reset}\n"
                 }
             }
         }
